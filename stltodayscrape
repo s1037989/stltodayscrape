@@ -1,0 +1,51 @@
+#!/usr/bin/perl
+
+use strict;
+use HTML::Tree;
+use LWP::Simple;
+use File::Path;
+
+my $stl = "/data/vhosts/www.borgia.com/htdocs/stltoday.com";
+my $base = "http://stats.stlhighschoolsports.com/sports";
+my $root = "teamschedule21.php";
+my @fall = qw/football crosscountryboys crosscountrygirls volleyballgirls volleyballboys softballfall soccerboys golfgirls golfboys/;
+my @spring = qw/basketballboys basketballgirls soccergirls/;
+my $year = (localtime())[5]; $year -= 100;
+my $month = (localtime())[4];
+my $fall = $month <=6 ? $year-1 : $year;
+my $spring = $month <=6 ? $year : $year+1;
+print "Fall: $fall\n";
+print "Spring: $spring\n";
+
+getdata($fall, $_) foreach @fall;
+getdata($spring, $_) foreach @spring;
+
+sub getdata {
+	my ($year, $sport) = @_;
+	return if (time() - (stat("$stl/$sport/$year/stats/$root"))[9]) < (3 * 60 * 60 * 24);
+	my $funky = "$base/$sport/$year/stats/$root";
+	my $content = get($funky);
+	mkpath "$stl/$sport/$year/stats";
+	print "$sport/$year/stats/$root\n";
+	my $tree = HTML::Tree->new();
+	$tree->parse($content);
+	my ($body) = $tree->look_down( 'id' , 'tncms-region-center-one-b-index' );
+	open OUT, ">$stl/$sport/$year/stats/$root";
+	print OUT $body->as_HTML if $body;
+	close OUT;
+	$_ = $body->as_HTML if $body;
+	while ( /href\s*=\s*"(\w+\.php)"/g ) {
+		my $page = $1;
+		next if (time() - (stat("$stl/$sport/$year/stats/$page"))[9]) < (3 * 60 * 60 * 24);
+		my $funky1 = "$base/$sport/$year/stats/$page";
+		my $content1 = get($funky1);
+		my $tree1 = HTML::Tree->new();
+		$tree1->parse($content1);
+		my ($body1) = $tree1->look_down( 'id' ,
+		'tncms-region-center-one-b-index' );
+		print "$sport/$year/stats/$page\n";
+		open OUT, ">$stl/$sport/$year/stats/$page";
+		print OUT $body1->as_HTML if $body1;
+		close OUT;
+	}
+}
